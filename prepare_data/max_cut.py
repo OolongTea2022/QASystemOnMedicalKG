@@ -6,14 +6,14 @@
 
 class CutWords:
     def __init__(self):
-        dict_path = './disease.txt'
+        dict_path = '../dict/disease.txt'
         self.word_dict, self.max_wordlen = self.load_words(dict_path)
 
     # 加载词典
     def load_words(self, dict_path):
         words = list()
         max_len = 0
-        for line in open(dict_path):
+        for line in open(dict_path, encoding='utf-8'):
             wd = line.strip()
             if not wd:
                 continue
@@ -100,3 +100,9 @@ class CutWords:
         else:
             return backward_cutlist
 
+if __name__ == '__main__':
+    c = CutWords()
+    txt = '她有小儿流行性感冒'
+    print(c.max_forward_cut(txt))
+    print(c.max_backward_cut(txt))
+    print(c.max_biward_cut(txt))

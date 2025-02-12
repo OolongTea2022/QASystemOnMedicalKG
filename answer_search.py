@@ -8,11 +8,12 @@ from py2neo import Graph
 
 class AnswerSearcher:
     def __init__(self):
-        self.g = Graph(
-            host="127.0.0.1",
-            http_port=7474,
-            user="lhy",
-            password="lhy123")
+        # self.g = Graph(
+        #     host="127.0.0.1",
+        #     http_port=7474,
+        #     user="neo4j",
+        #     password="768260")
+        self.g = Graph("bolt://localhost:7687", auth=("neo4j", "12345678"))
         self.num_limit = 20
 
     '''执行cypher查询，并返回相应结果'''
@@ -30,7 +31,7 @@ class AnswerSearcher:
                 final_answers.append(final_answer)
         return final_answers
 
-    '''根据对应的qustion_type，调用相应的回复模板'''
+    '''根据对应的question_type，调用相应的回复模板'''
     def answer_prettify(self, question_type, answers):
         final_answer = []
         if not answers:

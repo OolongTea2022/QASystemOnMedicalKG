@@ -7,15 +7,18 @@
 
 import urllib.request
 import urllib.parse
+
+import chardet
 from lxml import etree
 import pymongo
-import re
+import crawl_drug
 
-'''基于司法网的犯罪案件采集'''
-class CrimeSpider:
+
+'''基于寻医问药的信息采集'''
+class MedicalSpider:
     def __init__(self):
         self.conn = pymongo.MongoClient()
-        self.db = self.conn['medical']
+        self.db = self.conn['medical1']
         self.col = self.db['data']
 
     '''根据url，请求html'''
@@ -24,7 +27,13 @@ class CrimeSpider:
                                  'Chrome/51.0.2704.63 Safari/537.36'}
         req = urllib.request.Request(url=url, headers=headers)
         res = urllib.request.urlopen(req)
-        html = res.read().decode('gbk')
+        try:
+            html = res.read().decode('gbk')
+        except Exception:
+            raw_data = res.read()
+            # 使用chardet检测编码
+            encoding = chardet.detect(raw_data)['encoding']
+            html = raw_data.decode(encoding)
         return html
 
     '''url解析'''
@@ -35,32 +44,46 @@ class CrimeSpider:
 
     '''测试'''
     def spider_main(self):
-        for page in range(1, 11000):
-            try:
-                basic_url = 'http://jib.xywy.com/il_sii/gaishu/%s.htm'%page
-                cause_url = 'http://jib.xywy.com/il_sii/cause/%s.htm'%page
-                prevent_url = 'http://jib.xywy.com/il_sii/prevent/%s.htm'%page
-                symptom_url = 'http://jib.xywy.com/il_sii/symptom/%s.htm'%page
-                inspect_url = 'http://jib.xywy.com/il_sii/inspect/%s.htm'%page
-                treat_url = 'http://jib.xywy.com/il_sii/treat/%s.htm'%page
-                food_url = 'http://jib.xywy.com/il_sii/food/%s.htm'%page
-                drug_url = 'http://jib.xywy.com/il_sii/drug/%s.htm'%page
-                data = {}
-                data['url'] = basic_url
-                data['basic_info'] = self.basicinfo_spider(basic_url)
-                data['cause_info'] =  self.common_spider(cause_url)
-                data['prevent_info'] =  self.common_spider(prevent_url)
-                data['symptom_info'] = self.symptom_spider(symptom_url)
-                data['inspect_info'] = self.inspect_spider(inspect_url)
-                data['treat_info'] = self.treat_spider(treat_url)
-                data['food_info'] = self.food_spider(food_url)
-                data['drug_info'] = self.drug_spider(drug_url)
-                print(page, basic_url)
-                self.col.insert(data)
+        with open('record.txt', 'a', encoding='utf-8') as file:
+            for page in range(1, 11000):
+                # time.sleep(0.01)
+                try:
+                    basic_url = f'http://jib.xywy.com/il_sii/gaishu/{page}.htm'
+                    cause_url = f'http://jib.xywy.com/il_sii/cause/{page}.htm'
+                    prevent_url = f'http://jib.xywy.com/il_sii/prevent/{page}.htm'
+                    symptom_url = f'http://jib.xywy.com/il_sii/symptom/{page}.htm'
+                    inspect_url = f'http://jib.xywy.com/il_sii/inspect/{page}.htm'
+                    treat_url = f'http://jib.xywy.com/il_sii/treat/{page}.htm'
+                    food_url = f'http://jib.xywy.com/il_sii/food/{page}.htm'
 
-            except Exception as e:
-                print(e, page)
-        return
+                    data = {}
+                    data['url'] = basic_url
+                    data['basic_info'], disease_name = self.basicinfo_spider(basic_url)
+
+                    # 空页直接跳过
+                    if disease_name == '':
+                        continue
+
+                    data['cause_info'] = self.common_spider(cause_url)
+                    data['prevent_info'] = self.common_spider(prevent_url)
+                    data['symptom_info'] = self.symptom_spider(symptom_url)
+                    data['inspect_info'] = self.inspect_spider(inspect_url)
+                    data['treat_info'] = self.treat_spider(treat_url)
+                    data['food_info'] = self.food_spider(food_url)
+
+                    # Modified 通过原网站找到的disease名称，在新网站进行搜索药品
+                    data['drug_info'] = crawl_drug.drug_spider_new(disease_name)
+                    info = f"{page:7} {disease_name}"
+
+                    if not data['drug_info']:
+                        file.write(info + '\n')
+                        file.flush()  # 实时刷新文件内容到磁盘
+                    self.col.insert(data)
+                    print(page, '\t', disease_name)
+
+                except Exception as e:
+                    print(e, page)
+
 
     '''基本信息解析'''
     def basicinfo_spider(self, url):
@@ -76,10 +99,11 @@ class CrimeSpider:
             infobox.append(info)
         basic_data = {}
         basic_data['category'] = category
-        basic_data['name'] = title.split('的简介')[0]
+        name = title.split('的简介')[0]
+        basic_data['name'] = name
         basic_data['desc'] = desc
         basic_data['attributes'] = infobox
-        return basic_data
+        return basic_data, name
 
     '''treat_infobox治疗解析'''
     def treat_spider(self, url):
@@ -98,6 +122,8 @@ class CrimeSpider:
         selector = etree.HTML(html)
         drugs = [i.replace('\n','').replace('\t', '').replace(' ','') for i in selector.xpath('//div[@class="fl drug-pic-rec mr30"]/p/a/text()')]
         return drugs
+
+
 
     '''food治疗解析'''
     def food_spider(self, url):
@@ -147,14 +173,16 @@ class CrimeSpider:
             if info:
                 infobox.append(info)
         return '\n'.join(infobox)
+
+
     '''检查项抓取模块'''
     def inspect_crawl(self):
-        for page in range(1, 3685):
+        for page in range(1, 3684):
             try:
                 url = 'http://jck.xywy.com/jc_%s.html'%page
                 html = self.get_html(url)
                 data = {}
-                data['url']= url
+                data['url'] = url
                 data['html'] = html
                 self.db['jc'].insert(data)
                 print(url)
@@ -162,5 +190,7 @@ class CrimeSpider:
                 print(e)
 
 
-handler = CrimeSpider()
-handler.inspect_crawl()
+handler = MedicalSpider()
+# handler.inspect_crawl()
+handler.spider_main()
+

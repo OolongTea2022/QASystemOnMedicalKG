@@ -1,57 +1,65 @@
 #!/usr/bin/env python3
 # coding: utf-8
-# File: MedicalGraph.py
+# Fle: MedicalGraph.py
 # Author: lhy<lhy_in_blcu@126.com,https://huangyong.github.io>
 # Date: 18-10-3
 
 import os
 import json
-from py2neo import Graph,Node
+from py2neo import Graph, Node
+
 
 class MedicalGraph:
     def __init__(self):
         cur_dir = '/'.join(os.path.abspath(__file__).split('/')[:-1])
-        self.data_path = os.path.join(cur_dir, 'data/medical.json')
-        self.g = Graph(
-            host="127.0.0.1",  # neo4j 搭载服务器的ip地址，ifconfig可获取到
-            http_port=7474,  # neo4j 服务器监听的端口号
-            user="lhy",  # 数据库user name，如果没有更改过，应该是neo4j
-            password="lhy123")
+        self.data_path = os.path.join(cur_dir, 'data/medical1.json') # medical0是作者的原数据，1是我自己爬的
+        # self.g = Graph(
+        #     host="127.0.0.1",  # neo4j 搭载服务器的ip地址，ifconfig可获取到
+        #     http_port=7474,  # neo4j 服务器监听的端口号
+        #     user="neo4j",  # 数据库user name，如果没有更改过，应该是neo4j
+        #     password="768260")
+        self.g = Graph("bolt://localhost:7687", auth=("neo4j", "12345678"))
+        print('initiation finish')
 
     '''读取文件'''
+
     def read_nodes(self):
         # 共７类节点
-        drugs = [] # 药品
-        foods = [] #　食物
-        checks = [] # 检查
-        departments = [] #科室
-        producers = [] #药品大类
-        diseases = [] #疾病
-        symptoms = []#症状
+        drugs = []  # 药品
+        foods = []  #　食物
+        checks = []  # 检查
+        departments = []  #科室
+        producers = []  #药品大类
+        diseases = []  #疾病
+        symptoms = []  #症状
 
-        disease_infos = []#疾病信息
+        disease_infos = []  #疾病信息
 
         # 构建节点实体关系
-        rels_department = [] #　科室－科室关系
-        rels_noteat = [] # 疾病－忌吃食物关系
-        rels_doeat = [] # 疾病－宜吃食物关系
-        rels_recommandeat = [] # 疾病－推荐吃食物关系
-        rels_commonddrug = [] # 疾病－通用药品关系
-        rels_recommanddrug = [] # 疾病－热门药品关系
-        rels_check = [] # 疾病－检查关系
-        rels_drug_producer = [] # 厂商－药物关系
+        rels_department = []  #　科室－科室关系
+        rels_noteat = []  # 疾病－忌吃食物关系
+        rels_doeat = []  # 疾病－宜吃食物关系
+        rels_recommandeat = []  # 疾病－推荐吃食物关系
+        rels_commonddrug = []  # 疾病－通用药品关系
+        rels_recommanddrug = []  # 疾病－热门药品关系
+        rels_check = []  # 疾病－检查关系
+        rels_drug_producer = []  # 厂商－药物关系
 
-        rels_symptom = [] #疾病症状关系
-        rels_acompany = [] # 疾病并发关系
-        rels_category = [] #　疾病与科室之间的关系
-
+        rels_symptom = []  #疾病症状关系
+        rels_acompany = []  # 疾病并发关系
+        rels_category = []  #　疾病与科室之间的关系
 
         count = 0
-        for data in open(self.data_path):
+
+        with open(self.data_path, encoding='utf-8') as f:
+            data_array = json.load(f)
+
+        # for data in open(self.data_path, encoding='utf-8'):
+        for data_json in data_array:
             disease_dict = {}
             count += 1
             print(count)
-            data_json = json.loads(data)
+            # data_json = json.loads(data)
             disease = data_json['name']
             disease_dict['name'] = disease
             diseases.append(disease)
@@ -92,7 +100,7 @@ class MedicalGraph:
             if 'cure_department' in data_json:
                 cure_department = data_json['cure_department']
                 if len(cure_department) == 1:
-                     rels_category.append([disease, cure_department[0]])
+                    rels_category.append([disease, cure_department[0]])
                 if len(cure_department) == 2:
                     big = cure_department[0]
                     small = cure_department[1]
@@ -105,7 +113,7 @@ class MedicalGraph:
             if 'cure_way' in data_json:
                 disease_dict['cure_way'] = data_json['cure_way']
 
-            if  'cure_lasttime' in data_json:
+            if 'cure_lasttime' in data_json:
                 disease_dict['cure_lasttime'] = data_json['cure_lasttime']
 
             if 'cured_prob' in data_json:
@@ -151,11 +159,13 @@ class MedicalGraph:
                 rels_drug_producer += [[i.split('(')[0], i.split('(')[-1].replace(')', '')] for i in drug_detail]
                 producers += producer
             disease_infos.append(disease_dict)
-        return set(drugs), set(foods), set(checks), set(departments), set(producers), set(symptoms), set(diseases), disease_infos,\
-               rels_check, rels_recommandeat, rels_noteat, rels_doeat, rels_department, rels_commonddrug, rels_drug_producer, rels_recommanddrug,\
-               rels_symptom, rels_acompany, rels_category
+        return set(drugs), set(foods), set(checks), set(departments), set(producers), set(symptoms), set(
+            diseases), disease_infos, \
+            rels_check, rels_recommandeat, rels_noteat, rels_doeat, rels_department, rels_commonddrug, rels_drug_producer, rels_recommanddrug, \
+            rels_symptom, rels_acompany, rels_category
 
     '''建立节点'''
+
     def create_node(self, label, nodes):
         count = 0
         for node_name in nodes:
@@ -166,22 +176,24 @@ class MedicalGraph:
         return
 
     '''创建知识图谱中心疾病的节点'''
+
     def create_diseases_nodes(self, disease_infos):
         count = 0
         for disease_dict in disease_infos:
             node = Node("Disease", name=disease_dict['name'], desc=disease_dict['desc'],
-                        prevent=disease_dict['prevent'] ,cause=disease_dict['cause'],
-                        easy_get=disease_dict['easy_get'],cure_lasttime=disease_dict['cure_lasttime'],
+                        prevent=disease_dict['prevent'], cause=disease_dict['cause'],
+                        easy_get=disease_dict['easy_get'], cure_lasttime=disease_dict['cure_lasttime'],
                         cure_department=disease_dict['cure_department']
-                        ,cure_way=disease_dict['cure_way'] , cured_prob=disease_dict['cured_prob'])
+                        , cure_way=disease_dict['cure_way'], cured_prob=disease_dict['cured_prob'])
             self.g.create(node)
             count += 1
             print(count)
         return
 
     '''创建知识图谱实体节点类型schema'''
+
     def create_graphnodes(self):
-        Drugs, Foods, Checks, Departments, Producers, Symptoms, Diseases, disease_infos,rels_check, rels_recommandeat, rels_noteat, rels_doeat, rels_department, rels_commonddrug, rels_drug_producer, rels_recommanddrug,rels_symptom, rels_acompany, rels_category = self.read_nodes()
+        Drugs, Foods, Checks, Departments, Producers, Symptoms, Diseases, disease_infos, rels_check, rels_recommandeat, rels_noteat, rels_doeat, rels_department, rels_commonddrug, rels_drug_producer, rels_recommanddrug, rels_symptom, rels_acompany, rels_category = self.read_nodes()
         self.create_diseases_nodes(disease_infos)
         self.create_node('Drug', Drugs)
         print(len(Drugs))
@@ -196,10 +208,10 @@ class MedicalGraph:
         self.create_node('Symptom', Symptoms)
         return
 
-
     '''创建实体关系边'''
+
     def create_graphrels(self):
-        Drugs, Foods, Checks, Departments, Producers, Symptoms, Diseases, disease_infos, rels_check, rels_recommandeat, rels_noteat, rels_doeat, rels_department, rels_commonddrug, rels_drug_producer, rels_recommanddrug,rels_symptom, rels_acompany, rels_category = self.read_nodes()
+        Drugs, Foods, Checks, Departments, Producers, Symptoms, Diseases, disease_infos, rels_check, rels_recommandeat, rels_noteat, rels_doeat, rels_department, rels_commonddrug, rels_drug_producer, rels_recommanddrug, rels_symptom, rels_acompany, rels_category = self.read_nodes()
         self.create_relationship('Disease', 'Food', rels_recommandeat, 'recommand_eat', '推荐食谱')
         self.create_relationship('Disease', 'Food', rels_noteat, 'no_eat', '忌吃')
         self.create_relationship('Disease', 'Food', rels_doeat, 'do_eat', '宜吃')
@@ -213,6 +225,7 @@ class MedicalGraph:
         self.create_relationship('Disease', 'Department', rels_category, 'belongs_to', '所属科室')
 
     '''创建实体关联边'''
+
     def create_relationship(self, start_node, end_node, edges, rel_type, rel_name):
         count = 0
         # 去重处理
@@ -235,15 +248,16 @@ class MedicalGraph:
         return
 
     '''导出数据'''
+
     def export_data(self):
         Drugs, Foods, Checks, Departments, Producers, Symptoms, Diseases, disease_infos, rels_check, rels_recommandeat, rels_noteat, rels_doeat, rels_department, rels_commonddrug, rels_drug_producer, rels_recommanddrug, rels_symptom, rels_acompany, rels_category = self.read_nodes()
-        f_drug = open('drug.txt', 'w+')
-        f_food = open('food.txt', 'w+')
-        f_check = open('check.txt', 'w+')
-        f_department = open('department.txt', 'w+')
-        f_producer = open('producer.txt', 'w+')
-        f_symptom = open('symptoms.txt', 'w+')
-        f_disease = open('disease.txt', 'w+')
+        f_drug = open('dict/drug.txt', 'w+')
+        f_food = open('dict/food.txt', 'w+')
+        f_check = open('dict/check.txt', 'w+')
+        f_department = open('dict/department.txt', 'w+')
+        f_producer = open('dict/producer.txt', 'w+')
+        f_symptom = open('dict/symptoms.txt', 'w+')
+        f_disease = open('dict/disease.txt', 'w+')
 
         f_drug.write('\n'.join(list(Drugs)))
         f_food.write('\n'.join(list(Foods)))
@@ -264,11 +278,14 @@ class MedicalGraph:
         return
 
 
-
 if __name__ == '__main__':
     handler = MedicalGraph()
-    print("step1:导入图谱节点中")
-    handler.create_graphnodes()
-    print("step2:导入图谱边中")      
+    # print("step1:导入图谱节点中")
+    # handler.create_graphnodes()
+    print("step2:导入图谱边中")
     handler.create_graphrels()
-    
+    # print('导出数据')
+    # handler.export_data()
+    print("finish")
+
+
